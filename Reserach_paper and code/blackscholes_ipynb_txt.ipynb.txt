@@ -1,0 +1,729 @@
+{
+  "nbformat": 4,
+  "nbformat_minor": 0,
+  "metadata": {
+    "colab": {
+      "name": "blackscholes.ipynb.txt",
+      "provenance": [],
+      "collapsed_sections": []
+    },
+    "kernelspec": {
+      "name": "python3",
+      "display_name": "Python 3"
+    },
+    "language_info": {
+      "name": "python"
+    }
+  },
+  "cells": [
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "3wPg-xYFXgIP"
+      },
+      "source": [
+        "import pandas as pd\n",
+        "import numpy as np\n",
+        "import os\n",
+        "import pandas_ta as ta\n",
+        "from sklearn.model_selection import train_test_split\n",
+        "from scipy.stats import norm\n",
+        "from keras.models import Sequential\n",
+        "from keras.layers import Dense, Activation, LeakyReLU\n",
+        "from keras import backend\n",
+        "from keras.callbacks import TensorBoard\n",
+        "from keras.optimizers import Adam"
+      ],
+      "execution_count": 212,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "dBMIbfFkAIa1",
+        "outputId": "bd1a809a-3d00-49b0-b360-d72a5b47b915"
+      },
+      "source": [
+        "from google.colab import drive\n",
+        "drive.mount('/content/drive')"
+      ],
+      "execution_count": 44,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "text": [
+            "Drive already mounted at /content/drive; to attempt to forcibly remount, call drive.mount(\"/content/drive\", force_remount=True).\n"
+          ],
+          "name": "stdout"
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "kGEmmdXSYRHU"
+      },
+      "source": [
+        "rf=pd.read_csv('/content/drive/MyDrive/black_scholes_option_pricing/risk_free_rate/India 10-Year Bond Yield Historical Data.csv')\n",
+        "rf.drop(['Open','High','Low' ,'Change %'],axis=1,inplace=True)\n",
+        "rf['Date']=pd.to_datetime(rf['Date'])\n",
+        "rf=rf.set_index(['Date'])"
+      ],
+      "execution_count": 53,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "Wj8CNcNq1lpS"
+      },
+      "source": [
+        "spot=pd.read_csv('/content/drive/MyDrive/black_scholes_option_pricing/spot_price/^NSEI.csv')\n",
+        "spot['return']=spot['Adj Close'].pct_change(1)\n",
+        "spot['volatility']=spot['return'].rolling(20).std()\n",
+        "spot['volatility']=spot['volatility']*np.sqrt(252)\n",
+        "spot.drop(['Open','High','Low' ,'Close','Volume'],axis=1,inplace=True)\n",
+        "spot=spot.set_index(['Date'])"
+      ],
+      "execution_count": 170,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "-7N8uwI51nRg"
+      },
+      "source": [
+        "spotdf=spot.join(rf,how='inner')"
+      ],
+      "execution_count": 171,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "iGhaDt4a2doH"
+      },
+      "source": [
+        "path='/content/drive/MyDrive/black_scholes_option_pricing/call_csv/'\n",
+        "z=os.listdir(path)\n",
+        "ce=[]\n",
+        "for i in z:\n",
+        "    call=pd.read_csv(path+i)\n",
+        "    ce.append(call)"
+      ],
+      "execution_count": 173,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "s_PltyjpS1sk"
+      },
+      "source": [
+        "for i in ce:\n",
+        "  i.columns=['Date','Strike Price','Close','Expiration'] "
+      ],
+      "execution_count": 174,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "oFtaeDypcyPg"
+      },
+      "source": [
+        "ce[5].columns=['Strike Price','Date','Close','Expiration'] "
+      ],
+      "execution_count": 175,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "wQPW2x5gTG2b"
+      },
+      "source": [
+        "call=pd.concat(ce)"
+      ],
+      "execution_count": 176,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "XGOM9RObXEdu"
+      },
+      "source": [
+        "call=call.set_index(['Date'])"
+      ],
+      "execution_count": 177,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "HqYNy3pLghfA"
+      },
+      "source": [
+        "final_call=call.join(spotdf,how='inner')"
+      ],
+      "execution_count": 178,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/",
+          "height": 238
+        },
+        "id": "D_QRjVjbgx6M",
+        "outputId": "c216afd1-7abd-45e0-cf12-b3b20e673fe5"
+      },
+      "source": [
+        "final_call.tail()"
+      ],
+      "execution_count": 179,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/html": [
+              "<div>\n",
+              "<style scoped>\n",
+              "    .dataframe tbody tr th:only-of-type {\n",
+              "        vertical-align: middle;\n",
+              "    }\n",
+              "\n",
+              "    .dataframe tbody tr th {\n",
+              "        vertical-align: top;\n",
+              "    }\n",
+              "\n",
+              "    .dataframe thead th {\n",
+              "        text-align: right;\n",
+              "    }\n",
+              "</style>\n",
+              "<table border=\"1\" class=\"dataframe\">\n",
+              "  <thead>\n",
+              "    <tr style=\"text-align: right;\">\n",
+              "      <th></th>\n",
+              "      <th>Strike Price</th>\n",
+              "      <th>Close</th>\n",
+              "      <th>Expiration</th>\n",
+              "      <th>Adj Close</th>\n",
+              "      <th>return</th>\n",
+              "      <th>volatility</th>\n",
+              "      <th>Price</th>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>Date</th>\n",
+              "      <th></th>\n",
+              "      <th></th>\n",
+              "      <th></th>\n",
+              "      <th></th>\n",
+              "      <th></th>\n",
+              "      <th></th>\n",
+              "      <th></th>\n",
+              "    </tr>\n",
+              "  </thead>\n",
+              "  <tbody>\n",
+              "    <tr>\n",
+              "      <th>2020-12-30</th>\n",
+              "      <td>14800</td>\n",
+              "      <td>0.60</td>\n",
+              "      <td>1</td>\n",
+              "      <td>13981.950195</td>\n",
+              "      <td>0.003542</td>\n",
+              "      <td>0.145312</td>\n",
+              "      <td>5.899</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>2020-12-30</th>\n",
+              "      <td>14850</td>\n",
+              "      <td>0.35</td>\n",
+              "      <td>1</td>\n",
+              "      <td>13981.950195</td>\n",
+              "      <td>0.003542</td>\n",
+              "      <td>0.145312</td>\n",
+              "      <td>5.899</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>2020-12-30</th>\n",
+              "      <td>14900</td>\n",
+              "      <td>0.55</td>\n",
+              "      <td>1</td>\n",
+              "      <td>13981.950195</td>\n",
+              "      <td>0.003542</td>\n",
+              "      <td>0.145312</td>\n",
+              "      <td>5.899</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>2020-12-30</th>\n",
+              "      <td>14950</td>\n",
+              "      <td>0.70</td>\n",
+              "      <td>1</td>\n",
+              "      <td>13981.950195</td>\n",
+              "      <td>0.003542</td>\n",
+              "      <td>0.145312</td>\n",
+              "      <td>5.899</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>2020-12-30</th>\n",
+              "      <td>15000</td>\n",
+              "      <td>0.55</td>\n",
+              "      <td>1</td>\n",
+              "      <td>13981.950195</td>\n",
+              "      <td>0.003542</td>\n",
+              "      <td>0.145312</td>\n",
+              "      <td>5.899</td>\n",
+              "    </tr>\n",
+              "  </tbody>\n",
+              "</table>\n",
+              "</div>"
+            ],
+            "text/plain": [
+              "           Strike Price  Close  Expiration  ...    return  volatility  Price\n",
+              "Date                                        ...                             \n",
+              "2020-12-30        14800   0.60           1  ...  0.003542    0.145312  5.899\n",
+              "2020-12-30        14850   0.35           1  ...  0.003542    0.145312  5.899\n",
+              "2020-12-30        14900   0.55           1  ...  0.003542    0.145312  5.899\n",
+              "2020-12-30        14950   0.70           1  ...  0.003542    0.145312  5.899\n",
+              "2020-12-30        15000   0.55           1  ...  0.003542    0.145312  5.899\n",
+              "\n",
+              "[5 rows x 7 columns]"
+            ]
+          },
+          "metadata": {
+            "tags": []
+          },
+          "execution_count": 179
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "j0bFHG2jV-yX"
+      },
+      "source": [
+        "path='/content/drive/MyDrive/black_scholes_option_pricing/put_csv/'\n",
+        "z=os.listdir(path)\n",
+        "pe=[]\n",
+        "for i in z:\n",
+        "    put=pd.read_csv(path+i)\n",
+        "    pe.append(put)"
+      ],
+      "execution_count": 180,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "QwWyKCIFWP8A"
+      },
+      "source": [
+        "for i in pe:\n",
+        "  i.columns=['Date','Strike Price','Close','Expiration'] "
+      ],
+      "execution_count": 181,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "lGZCi8bRkAPz"
+      },
+      "source": [
+        "pe[5].columns=['Strike Price','Date','Close','Expiration'] "
+      ],
+      "execution_count": 182,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "qgcGI7FPkHPX"
+      },
+      "source": [
+        "put=pd.concat(pe)"
+      ],
+      "execution_count": 183,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "dWQ7diOYkLwl"
+      },
+      "source": [
+        "put=put.set_index(['Date'])\n",
+        "final_put=put.join(spotdf,how='inner')"
+      ],
+      "execution_count": 184,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "3U_gCvA5x09F"
+      },
+      "source": [
+        "final_put.dropna(inplace=True)"
+      ],
+      "execution_count": 185,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "0xOyvWGskigi"
+      },
+      "source": [
+        "final_call.dropna(inplace=True)"
+      ],
+      "execution_count": 186,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "T_x40l71Q0Jb",
+        "colab": {
+          "base_uri": "https://localhost:8080/",
+          "height": 238
+        },
+        "outputId": "7c993f66-98a2-40cb-b181-162f9e507036"
+      },
+      "source": [
+        "final_call.head()"
+      ],
+      "execution_count": 187,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/html": [
+              "<div>\n",
+              "<style scoped>\n",
+              "    .dataframe tbody tr th:only-of-type {\n",
+              "        vertical-align: middle;\n",
+              "    }\n",
+              "\n",
+              "    .dataframe tbody tr th {\n",
+              "        vertical-align: top;\n",
+              "    }\n",
+              "\n",
+              "    .dataframe thead th {\n",
+              "        text-align: right;\n",
+              "    }\n",
+              "</style>\n",
+              "<table border=\"1\" class=\"dataframe\">\n",
+              "  <thead>\n",
+              "    <tr style=\"text-align: right;\">\n",
+              "      <th></th>\n",
+              "      <th>Strike Price</th>\n",
+              "      <th>Close</th>\n",
+              "      <th>Expiration</th>\n",
+              "      <th>Adj Close</th>\n",
+              "      <th>return</th>\n",
+              "      <th>volatility</th>\n",
+              "      <th>Price</th>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>Date</th>\n",
+              "      <th></th>\n",
+              "      <th></th>\n",
+              "      <th></th>\n",
+              "      <th></th>\n",
+              "      <th></th>\n",
+              "      <th></th>\n",
+              "      <th></th>\n",
+              "    </tr>\n",
+              "  </thead>\n",
+              "  <tbody>\n",
+              "    <tr>\n",
+              "      <th>2013-12-31</th>\n",
+              "      <td>6200</td>\n",
+              "      <td>199.65</td>\n",
+              "      <td>30</td>\n",
+              "      <td>6304.0</td>\n",
+              "      <td>0.002051</td>\n",
+              "      <td>0.135503</td>\n",
+              "      <td>8.82</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>2013-12-31</th>\n",
+              "      <td>6300</td>\n",
+              "      <td>131.00</td>\n",
+              "      <td>30</td>\n",
+              "      <td>6304.0</td>\n",
+              "      <td>0.002051</td>\n",
+              "      <td>0.135503</td>\n",
+              "      <td>8.82</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>2013-12-31</th>\n",
+              "      <td>6400</td>\n",
+              "      <td>79.00</td>\n",
+              "      <td>30</td>\n",
+              "      <td>6304.0</td>\n",
+              "      <td>0.002051</td>\n",
+              "      <td>0.135503</td>\n",
+              "      <td>8.82</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>2013-12-31</th>\n",
+              "      <td>6500</td>\n",
+              "      <td>41.35</td>\n",
+              "      <td>30</td>\n",
+              "      <td>6304.0</td>\n",
+              "      <td>0.002051</td>\n",
+              "      <td>0.135503</td>\n",
+              "      <td>8.82</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>2013-12-31</th>\n",
+              "      <td>6600</td>\n",
+              "      <td>18.60</td>\n",
+              "      <td>30</td>\n",
+              "      <td>6304.0</td>\n",
+              "      <td>0.002051</td>\n",
+              "      <td>0.135503</td>\n",
+              "      <td>8.82</td>\n",
+              "    </tr>\n",
+              "  </tbody>\n",
+              "</table>\n",
+              "</div>"
+            ],
+            "text/plain": [
+              "           Strike Price   Close  Expiration  ...    return  volatility  Price\n",
+              "Date                                         ...                             \n",
+              "2013-12-31         6200  199.65          30  ...  0.002051    0.135503   8.82\n",
+              "2013-12-31         6300  131.00          30  ...  0.002051    0.135503   8.82\n",
+              "2013-12-31         6400   79.00          30  ...  0.002051    0.135503   8.82\n",
+              "2013-12-31         6500   41.35          30  ...  0.002051    0.135503   8.82\n",
+              "2013-12-31         6600   18.60          30  ...  0.002051    0.135503   8.82\n",
+              "\n",
+              "[5 rows x 7 columns]"
+            ]
+          },
+          "metadata": {
+            "tags": []
+          },
+          "execution_count": 187
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "953efrUjomJF"
+      },
+      "source": [
+        "final_call= final_call[final_call[\"Strike Price\"].str.startswith('25JUN',na=False)== False]\n",
+        "final_call= final_call[final_call[\"Strike Price\"].str.startswith('25Jun',na=False)== False]\n",
+        "final_put= final_put[final_put[\"Strike Price\"].str.startswith('25JUN',na=False)== False]\n",
+        "final_put= final_put[final_put[\"Strike Price\"].str.startswith('25Jun',na=False)== False]\n",
+        "final_put= final_put[final_put[\"Strike Price\"].str.startswith('TY',na=False)== False]"
+      ],
+      "execution_count": 188,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "es7nbqujossp"
+      },
+      "source": [
+        "final_call['Strike Price']=final_call['Strike Price'].astype(int)\n",
+        "final_put['Strike Price']=final_put['Strike Price'].astype(int)"
+      ],
+      "execution_count": 189,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "AVs-BOv_SRY_"
+      },
+      "source": [
+        "def call_pricing(df):\n",
+        "  S=df['Adj Close']\n",
+        "  K= df[\"Strike Price\"]\n",
+        "  t=df.Expiration/365\n",
+        "  r=df[\"Price\"]/100\n",
+        "  sigma=df[\"volatility\"]\n",
+        "  d1=(np.log(S/K)+(r+(sigma**2)/2)*t)/(sigma*(t**0.5))\n",
+        "  d2=d1-sigma*(t**0.5)\n",
+        "  Blackscholes_pred=  S*norm.cdf(d1)-K*np.exp(-r * t)*norm.cdf(d2)\n",
+        "  return Blackscholes_pred"
+      ],
+      "execution_count": 197,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "78xADRcm0FU-",
+        "outputId": "0495e31d-9aaf-44f2-d64b-9dbb92fcb6dd"
+      },
+      "source": [
+        "final_call.columns"
+      ],
+      "execution_count": 194,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": [
+              "Index(['Strike Price', 'Close', 'Expiration', 'Adj Close', 'return',\n",
+              "       'volatility', 'Price'],\n",
+              "      dtype='object')"
+            ]
+          },
+          "metadata": {
+            "tags": []
+          },
+          "execution_count": 194
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "ijb2BOJJqYqX"
+      },
+      "source": [
+        "x=call_pricing(final_call)"
+      ],
+      "execution_count": 198,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "Mgtog9jrwDyP"
+      },
+      "source": [
+        "final_call['bs_call']=x"
+      ],
+      "execution_count": 199,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "cLxowLbbV-pp"
+      },
+      "source": [
+        "def put_pricing(df):\n",
+        "  S=df['adj_close']\n",
+        "  K= df[\"Strike Price\"]\n",
+        "  t=df.Expiration/365\n",
+        "  r=df[\"Price\"]/100\n",
+        "  sigma=df[\"volatility\"]\n",
+        "  d1=(np.log(S/K)+(r+(sigma**2)/2)*t)/(sigma*(t**0.5))\n",
+        "  d2=d1-sigma*(t**0.5)\n",
+        "  Blackscholes_pred= K*np.exp(-r * t)*norm.cdf(-d2) - S*norm.cdf(-d1)\n",
+        "  return Blackscholes_pred"
+      ],
+      "execution_count": 206,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "Gqegw-6x171R",
+        "outputId": "f9ef5d80-e6ed-4808-f8cc-0d476418680b"
+      },
+      "source": [
+        "final_put.columns"
+      ],
+      "execution_count": 205,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": [
+              "Index(['Strike Price', 'close', 'Expiration', 'adj_close', 'return',\n",
+              "       'volatility', 'Price'],\n",
+              "      dtype='object')"
+            ]
+          },
+          "metadata": {
+            "tags": []
+          },
+          "execution_count": 205
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "e-Sa9ObRwPRJ"
+      },
+      "source": [
+        "y=put_pricing(final_put)"
+      ],
+      "execution_count": 207,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "XACiC9A9t0g4"
+      },
+      "source": [
+        "final_put['bs_put']=y"
+      ],
+      "execution_count": 208,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "7UQDz-koxPUL"
+      },
+      "source": [
+        "final_call.to_csv('call_black_scholes.csv')\n",
+        "final_put.to_csv('put_black_scholes.csv')"
+      ],
+      "execution_count": 211,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "8-g7m2Mal0Ee"
+      },
+      "source": [
+        "callx_train,cally_train,callx_test,cally_test=train_test_split(final_call.drop['close'],final_call[''])"
+      ],
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "WSa-vABQlCxZ"
+      },
+      "source": [
+        "def mlp():\n",
+        "  model=sequential()\n",
+        "  \n"
+      ],
+      "execution_count": null,
+      "outputs": []
+    }
+  ]
+}

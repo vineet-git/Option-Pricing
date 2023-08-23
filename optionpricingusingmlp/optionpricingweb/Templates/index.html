@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="utf-8">
+    <title>Home page</title>
+  </head>
+  <body>
+    <h1>optionpricingweb</h1>
+    <form action="{% url 'result' %}">
+      {% csrf_token %}
+      
+      <p>Strike Price:</p>
+      <input type="text" name="Strike Price">
+      <br>
+
+      <p>,Expiration:</p>
+      <input type="text" name=",Expiration">
+      <br>
+
+      <p>Adj Close:</p>
+      <input type="text" name="Adj Close">
+      <br>
+
+      <p>Price:</p>
+      <input type="text" name="Price">
+      <br>
+
+      <p>volatility:</p>
+      <input type="text" name="volatility">
+      <br>
+
+      <input type="submit" value='Get Predictions'>
+    </form>
+  </body>
+</html>
